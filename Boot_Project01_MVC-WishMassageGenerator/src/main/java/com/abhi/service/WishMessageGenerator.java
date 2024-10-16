@@ -24,4 +24,8 @@ public class WishMessageGenerator implements IWishMessageGenerator {
 
 		return msg + " 	Mr/Miss " + name;
 	}
+	
+	public void name() {
+		
+	}
 }
