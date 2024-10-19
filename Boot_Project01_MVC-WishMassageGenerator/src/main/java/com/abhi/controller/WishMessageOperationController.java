@@ -32,6 +32,26 @@ public class WishMessageOperationController {
 	    
 	    return mvw;
 	}*/
+
+	/*@RequestMapping("/wmg")
+	public String fetchMessage(@RequestParam("name") String name, Model model) {
+		
+		String generatedMessage = service.generateMessage(name);
+		model.addAttribute("wMsg", generatedMessage);
+		model.addAttribute("sysdate", new Date());
+	
+		return "checkStatus";
+	}*/
+
+	/*	@RequestMapping("/wmg")
+		public String fetchMessage(@RequestParam("name") String name,HashMap<String, Object> mp) {
+			System.err.println(mp.getClass());
+			String generatedMessage = service.generateMessage(name);
+			mp.put("wMsg", generatedMessage);
+			mp.put("sysdate", new Date());
+			return "checkStatus";
+		}*/
+
 	@RequestMapping("/wmg")
 	public String fetchMessage(@RequestParam("name") String name, Map<String, Object> mp) {
 		System.err.println(mp.getClass());
