@@ -16,6 +16,12 @@ public class WishMessageOperationController {
 	@Autowired
 	private IWishMessageGenerator service;
 
+	/**
+	 * =>if we take handler method with "/" request path to launch the home
+	 * page..then there is not need of taking index.jsp separate to send the
+	 * implicit request, More over this technique works in both external tomcat
+	 * server deployment and embedded tomcat server deployment of spring boot app.
+	 */
 	@RequestMapping("/")
 	public String msgController() {
 		// Maps to the welcome.jsp
