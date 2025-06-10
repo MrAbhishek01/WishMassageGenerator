@@ -1,0 +1,242 @@
+CouponThread
+===============
+
+package com.bpcl.utils;
+
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Socket;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import com.bpcl.constant.AppConstants;
+import com.bpcl.model.CouponQrCode;
+import com.bpcl.model.Indent;
+import com.bpcl.repository.CouponQrCodeRepository;
+import com.bpcl.repository.IndentRepository;
+import com.bpcl.service.IndentService;
+
+public class CouponPrintingThread extends Thread {
+
+	private final CouponQrCodeRepository couponQrCodeRepository;
+	private final IndentRepository indentRepository;
+	private final IndentService indentService;
+
+	private Integer indentId;
+	private final AtomicBoolean isCancelled = new AtomicBoolean(false);
+
+	// Printer Config
+	private static final String PRINTER_IP = "169.254.156.56";
+	private static final int PRINTER_PORT = 8081;
+	private static final int BUFFER_SIZE = 1024;
+
+	public CouponPrintingThread(CouponQrCodeRepository couponQrCodeRepository, IndentRepository indentRepository,
+			IndentService indentService) {
+		this.couponQrCodeRepository = couponQrCodeRepository;
+		this.indentRepository = indentRepository;
+		this.indentService = indentService;
+	}
+
+	public void startThread(Integer indentId) {
+		this.indentId = indentId;
+		this.start();
+	}
+
+	public void cancelThread() {
+		isCancelled.set(true);
+		this.interrupt();
+	}
+
+	@Override
+	public void run() {
+		List<CouponQrCode> couponList = couponQrCodeRepository.findByIndentIDAndStatus(indentId,
+				AppConstants.NEW_COUPON_CODE);
+
+		Indent indent = indentRepository.findById(indentId).orElse(null);
+		if (indent == null || couponList == null || couponList.isEmpty()) {
+			System.out.println("No indent or coupons found for indentId: " + indentId);
+			return;
+		}
+
+		int lotQty = indent.getLotQty();
+		int printedCount = 0;
+
+		try (Socket printerSocket = new Socket(PRINTER_IP, PRINTER_PORT);
+			 OutputStream output = printerSocket.getOutputStream();
+			 InputStream input = printerSocket.getInputStream()) {
+
+			for (CouponQrCode coupon : couponList) {
+				if (isCancelled.get()) {
+					System.out.println("Printing cancelled for indentId: " + indentId);
+					break;
+				}
+
+				String barcode = coupon.getCouponCode();
+				try {
+					// Send barcode
+					output.write(barcode.getBytes());
+					output.flush();
+					System.out.println("Sent barcode to printer: " + barcode);
+
+					// Wait for printer response
+					byte[] buffer = new byte[BUFFER_SIZE];
+					int bytesRead = input.read(buffer);
+					String response = new String(buffer, 0, bytesRead).trim();
+
+					System.out.println("Printer Response: " + response);
+
+					if (!response.contains("Give me string")) {
+						System.err.println("Unexpected response from printer: " + response);
+						break;
+					}
+
+					// Update coupon status after confirmation
+					coupon.setStatus(AppConstants.PRINTED_COUPON_CODE);
+					couponQrCodeRepository.save(coupon);
+					printedCount++;
+
+					System.out.println("Printed: " + printedCount + "/" + lotQty);
+
+					if (printedCount >= lotQty) {
+						Thread.sleep(2000); // allow SSE update
+						indentService.inactiveIndent(indentId);
+						System.out.println("Printing completed for indentId: " + indentId);
+						break;
+					}
+
+					Thread.sleep(5000); // simulate delay
+
+				} catch (Exception e) {
+					System.err.println("Error during printing: " + e.getMessage());
+					break;
+				}
+			}
+
+		} catch (Exception e) {
+			System.err.println("Printer connection error: " + e.getMessage());
+		}
+	}
+}
+
+
+couponPrinting Thread 
+======================
+
+
+package com.bpcl.utils;
+
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Socket;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import com.bpcl.constant.AppConstants;
+import com.bpcl.model.CapQrCode;
+import com.bpcl.model.Indent;
+import com.bpcl.repository.CapQrCodeRepository;
+import com.bpcl.repository.IndentRepository;
+import com.bpcl.service.IndentService;
+
+public class CapPrintingThread extends Thread {
+
+	private final CapQrCodeRepository capQrCodeRepository;
+	private final IndentRepository indentRepository;
+	private final IndentService indentService;
+
+	private Integer indentId;
+	private final AtomicBoolean isCancelled = new AtomicBoolean(false);
+
+	// Printer Config
+	private static final String PRINTER_IP = "169.254.156.56";
+	private static final int PRINTER_PORT = 8081;
+	private static final int BUFFER_SIZE = 1024;
+
+	public CapPrintingThread(CapQrCodeRepository capQrCodeRepository, IndentRepository indentRepository,
+							  IndentService indentService) {
+		this.capQrCodeRepository = capQrCodeRepository;
+		this.indentRepository = indentRepository;
+		this.indentService = indentService;
+	}
+
+	public void startThread(Integer indentId) {
+		this.indentId = indentId;
+		this.start();
+	}
+
+	public void cancelThread() {
+		isCancelled.set(true);
+		this.interrupt();
+	}
+
+	@Override
+	public void run() {
+		List<CapQrCode> capList = capQrCodeRepository.findByIndentIDAndStatus(indentId, AppConstants.NEW_CAP_CODE);
+		Indent indent = indentRepository.findById(indentId).orElse(null);
+
+		if (indent == null || capList == null || capList.isEmpty()) {
+			System.out.println("No indent or caps found for indentId: " + indentId);
+			return;
+		}
+
+		int lotQty = indent.getLotQty();
+		int printedCount = 0;
+
+		try (Socket printerSocket = new Socket(PRINTER_IP, PRINTER_PORT);
+			 OutputStream output = printerSocket.getOutputStream();
+			 InputStream input = printerSocket.getInputStream()) {
+
+			for (CapQrCode cap : capList) {
+				if (isCancelled.get()) {
+					System.out.println("Printing cancelled for indentId: " + indentId);
+					break;
+				}
+
+				String barcode = cap.getCapCode(); // assumed to hold printable QR code string
+
+				try {
+					// Send cap barcode to printer
+					output.write(barcode.getBytes());
+					output.flush();
+					System.out.println("Sent to printer: " + barcode);
+
+					// Receive response from printer
+					byte[] buffer = new byte[BUFFER_SIZE];
+					int bytesRead = input.read(buffer);
+					String response = new String(buffer, 0, bytesRead).trim();
+
+					System.out.println("Printer Response: " + response);
+
+					if (!response.contains("Give me string")) {
+						System.err.println("Unexpected response from printer: " + response);
+						break;
+					}
+
+					// Update status in DB
+					cap.setStatus(AppConstants.PRINTED_CAP_CODE);
+					capQrCodeRepository.save(cap);
+					printedCount++;
+
+					System.out.println("Printed: " + printedCount + "/" + lotQty);
+
+					if (printedCount >= lotQty) {
+						Thread.sleep(2000); // allow SSE to complete
+						indentService.inactiveIndent(indentId);
+						System.out.println("Cap printing completed for indentId: " + indentId);
+						break;
+					}
+
+					Thread.sleep(5000); // simulate printer delay
+
+				} catch (Exception e) {
+					System.err.println("Error printing cap QR: " + e.getMessage());
+					break;
+				}
+			}
+
+		} catch (Exception e) {
+			System.err.println("Printer connection failed: " + e.getMessage());
+			e.printStackTrace();
+		}
+	}
+}
